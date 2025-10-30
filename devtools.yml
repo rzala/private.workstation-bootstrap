@@ -1,0 +1,266 @@
+---
+- name: Install development tools on Fedora Workstation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    kubectl_version: "v1.31.1"
+    k9s_version: "v0.32.5"
+    stern_version: "v1.30.0"
+    jira_cli_version: "v1.5.1"
+    kubectx_version: "v0.9.5"
+    yq_version: "v4.44.3"
+    sops_version: "v3.9.0"
+
+    bin_dir: "{{ lookup('env','HOME') }}/.local/bin"
+
+    base_packages:
+      - git
+      - fzf
+      - curl
+      - unzip
+      - tar
+      - jq
+      - ripgrep
+      - procps-ng
+      - powerline
+      - powerline-fonts
+      - podman
+      - buildah
+      - skopeo
+
+  tasks:
+    - name: Ensure ~/.local/bin exists
+      file:
+        path: "{{ bin_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Install base development packages via DNF
+      dnf:
+        name: "{{ base_packages }}"
+        state: present
+      become: true
+
+    - name: Install kubectl
+      shell: |
+        set -e
+        mkdir -p {{ bin_dir }}
+        curl -fsSL -o {{ bin_dir }}/kubectl https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl
+        chmod +x {{ bin_dir }}/kubectl
+      args:
+        creates: "{{ bin_dir }}/kubectl"
+
+    - name: Install kubectx
+      shell: |
+        set -e
+        mkdir -p {{ bin_dir }}
+        curl -fsSL -o {{ bin_dir }}/kubectx https://github.com/ahmetb/kubectx/releases/download/{{ kubectx_version }}/kubectx
+        chmod +x {{ bin_dir }}/kubectx
+      args:
+        creates: "{{ bin_dir }}/kubectx"
+
+    - name: Install kubens
+      shell: |
+        set -e
+        mkdir -p {{ bin_dir }}
+        curl -fsSL -o {{ bin_dir }}/kubens https://github.com/ahmetb/kubectx/releases/download/{{ kubectx_version }}/kubens
+        chmod +x {{ bin_dir }}/kubens
+      args:
+        creates: "{{ bin_dir }}/kubens"
+
+    - name: Install k9s
+      shell: |
+        set -e
+        mkdir -p {{ bin_dir }}
+        curl -fsSL -o /tmp/k9s.tgz https://github.com/derailed/k9s/releases/download/{{ k9s_version }}/k9s_Linux_amd64.tar.gz
+        tar -xzf /tmp/k9s.tgz -C /tmp
+        install -m 0755 /tmp/k9s {{ bin_dir }}/k9s
+        rm -f /tmp/k9s /tmp/k9s.tgz
+      args:
+        creates: "{{ bin_dir }}/k9s"
+
+    - name: Install stern
+      shell: |
+        set -e
+        mkdir -p {{ bin_dir }}
+        curl -fsSL -o /tmp/stern.tgz https://github.com/stern/stern/releases/download/{{ stern_version }}/stern_{{ stern_version | regex_replace('^v','') }}_linux_amd64.tar.gz
+        tar -xzf /tmp/stern.tgz -C /tmp stern
+        install -m 0755 /tmp/stern {{ bin_dir }}/stern
+        rm -f /tmp/stern /tmp/stern.tgz
+      args:
+        creates: "{{ bin_dir }}/stern"
+
+    - name: Install AWS CLI v2
+      shell: |
+        set -e
+        tmpdir=$(mktemp -d)
+        curl -fsSL -o $tmpdir/awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        unzip -q $tmpdir/awscliv2.zip -d $tmpdir
+        sudo $tmpdir/aws/install --bin-dir {{ bin_dir }} --install-dir $HOME/.local/aws-cli --update
+        rm -rf $tmpdir
+      args:
+        creates: "{{ bin_dir }}/aws"
+
+    - name: Install jira-cli
+      shell: |
+        set -e
+        mkdir -p {{ bin_dir }}
+        tmpdir=$(mktemp -d)
+        curl -fsSL -o $tmpdir/jira.tar.gz https://github.com/ankitpokhrel/jira-cli/releases/download/{{ jira_cli_version }}/jira_{{ jira_cli_version | regex_replace('^v','') }}_linux_x86_64.tar.gz
+        tar -xzf $tmpdir/jira.tar.gz -C $tmpdir
+        find $tmpdir -name "jira" -type f -executable -exec install -m 0755 {} {{ bin_dir }}/jira \;
+        rm -rf $tmpdir
+      args:
+        creates: "{{ bin_dir }}/jira"
+
+    - name: Install yq
+      shell: |
+        set -e
+        mkdir -p {{ bin_dir }}
+        curl -fsSL -o {{ bin_dir }}/yq https://github.com/mikefarah/yq/releases/download/{{ yq_version }}/yq_linux_amd64
+        chmod +x {{ bin_dir }}/yq
+      args:
+        creates: "{{ bin_dir }}/yq"
+
+    - name: Install sops
+      shell: |
+        set -e
+        mkdir -p {{ bin_dir }}
+        curl -fsSL -o {{ bin_dir }}/sops https://github.com/getsops/sops/releases/download/{{ sops_version }}/sops-{{ sops_version }}.linux.amd64
+        chmod +x {{ bin_dir }}/sops
+      args:
+        creates: "{{ bin_dir }}/sops"
+
+    - name: Install Oh-My-Zsh
+      shell: |
+        set -e
+        export RUNZSH=no CHSH=no KEEP_ZSHRC=yes
+        if [ ! -d $HOME/.oh-my-zsh ]; then
+          sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+        fi
+      args:
+        creates: "{{ lookup('env','HOME') }}/.oh-my-zsh"
+
+    - name: Install zsh-autosuggestions plugin
+      git:
+        repo: https://github.com/zsh-users/zsh-autosuggestions
+        dest: "{{ lookup('env','HOME') }}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+        depth: 1
+
+    - name: Install zsh-syntax-highlighting plugin
+      git:
+        repo: https://github.com/zsh-users/zsh-syntax-highlighting
+        dest: "{{ lookup('env','HOME') }}/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
+        depth: 1
+
+    - name: Setup fzf
+      shell: |
+        set -e
+        if [ ! -d ~/.fzf ]; then
+          git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+          ~/.fzf/install --all --no-update-rc
+        fi
+      args:
+        creates: "{{ lookup('env','HOME') }}/.fzf"
+
+    - name: Install Powerlevel10k theme
+      git:
+        repo: https://github.com/romkatv/powerlevel10k.git
+        dest: "{{ lookup('env','HOME') }}/.oh-my-zsh/custom/themes/powerlevel10k"
+        depth: 1
+
+    - name: Write ~/.zshrc
+      copy:
+        dest: "{{ lookup('env','HOME') }}/.zshrc"
+        mode: "0644"
+        content: |
+          export ZSH="$HOME/.oh-my-zsh"
+          ZSH_THEME="powerlevel10k/powerlevel10k"
+          plugins=(git kubectl zsh-autosuggestions zsh-syntax-highlighting fzf podman)
+          source $ZSH/oh-my-zsh.sh
+
+          export PATH="$HOME/.local/bin:$PATH"
+
+          # Kubectl aliases and completions
+          alias k="kubectl"
+          alias kctx="kubectx"
+          alias kns="kubens"
+          alias k9="k9s"
+          alias kgp="kubectl get pods"
+          alias kgs="kubectl get svc"
+          alias kgd="kubectl get deployment"
+          alias kaf="kubectl apply -f"
+          alias kdel="kubectl delete"
+          alias klog="kubectl logs"
+          alias kexec="kubectl exec -it"
+
+          # Podman aliases
+          alias docker="podman"
+          alias pd="podman"
+          alias pdi="podman images"
+          alias pds="podman ps"
+          alias pdsa="podman ps -a"
+          alias pdb="podman build"
+          alias pdr="podman run"
+          alias pde="podman exec"
+
+          # Git aliases
+          alias gs="git status"
+          alias ga="git add"
+          alias gc="git commit"
+          alias gp="git push"
+          alias gl="git pull"
+          alias gco="git checkout"
+          alias gb="git branch"
+          alias gd="git diff"
+          alias glog="git log --oneline --graph"
+
+          # FZF configuration
+          if command -v fzf >/dev/null 2>&1; then
+            [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+          fi
+
+          export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
+          export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+          export FZF_ALT_C_COMMAND='find . -type d'
+          
+          # Powerline configuration
+          if command -v powerline-daemon >/dev/null 2>&1; then
+            powerline-daemon -q
+            POWERLINE_BASH_CONTINUATION=1
+            POWERLINE_BASH_SELECT=1
+          fi
+
+          export EDITOR=vim
+
+          # Enable kubectl completion
+          if command -v kubectl >/dev/null 2>&1; then
+            source <(kubectl completion zsh)
+          fi
+
+          # Enable podman completion
+          if command -v podman >/dev/null 2>&1; then
+            source <(podman completion zsh)
+          fi
+
+    - name: Add zsh auto-start comment to .bashrc
+      lineinfile:
+        path: "{{ lookup('env','HOME') }}/.bashrc"
+        line: "# Auto-start zsh if available and interactive"
+        create: yes
+
+    - name: Add zsh exec to .bashrc
+      lineinfile:
+        path: "{{ lookup('env','HOME') }}/.bashrc"
+        line: '[[ $- == *i* ]] && command -v zsh >/dev/null 2>&1 && [[ "$SHELL" != *"zsh"* ]] && exec zsh'
+        create: yes
+
+    - name: Summary
+      debug:
+        msg:
+          - "✓ Installed development tools into ~/.local/bin"
+          - "✓ Configured zsh with Oh-My-Zsh and Powerlevel10k"
+          - "✓ All tools ready: kubectl, k9s, stern, aws, jira, yq, sops"
+          - "✓ Container tools: podman, buildah, skopeo"

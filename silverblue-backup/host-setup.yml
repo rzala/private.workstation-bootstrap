@@ -1,0 +1,102 @@
+---
+- name: Configure Fedora Silverblue host with zsh
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Check if packages are already layered on host
+      shell: rpm-ostree status --json | jq -r '.deployments[0].packages[]?' | grep -E '^(zsh|code|vim)$'
+      register: packages_check
+      failed_when: false
+      changed_when: false
+
+    - name: Layer zsh, VSCode, and vim onto Fedora Silverblue host
+      shell: rpm-ostree install zsh code vim
+      become: true
+      when: packages_check.stdout_lines | length < 3
+      register: rpm_ostree_result
+
+    - name: Set zsh as default shell for user on host
+      user:
+        name: "{{ lookup('env','USER') }}"
+        shell: /usr/bin/zsh
+      become: true
+      when: rpm_ostree_result is defined and rpm_ostree_result.changed
+
+    - name: Create basic .zshrc for host (if not exists)
+      copy:
+        dest: "{{ lookup('env','HOME') }}/.zshrc"
+        mode: "0644"
+        force: false
+        content: |
+          # Basic zsh configuration for Fedora Silverblue host
+          
+          # Set PATH to include user's local bin
+          export PATH="$HOME/.local/bin:$PATH"
+          
+          # Basic aliases
+          alias ll='ls -la'
+          alias la='ls -A'
+          alias l='ls -CF'
+          
+          # Toolbox aliases
+          alias tb="toolbox"
+          alias tbe="toolbox enter"
+          alias tbl="toolbox list"
+          alias tbc="toolbox create"
+          
+          # Editor aliases
+          alias vi="vim"
+          alias c="code"
+          
+          # Function to run commands on host from toolbox
+          host-cmd() {
+            if [[ -n "$TOOLBOX_NAME" ]]; then
+              flatpak-spawn --host "$@"
+            else
+              "$@"
+            fi
+          }
+          
+          # Enable basic completion
+          autoload -U compinit && compinit
+          
+          # Basic prompt
+          PS1='%n@%m:%~$ '
+
+    - name: Notify about reboot requirement
+      debug:
+        msg:
+          - "Zsh, VSCode, and vim have been layered onto the host system."
+          - "You need to REBOOT for the changes to take effect."
+          - "After reboot, your default shell on the host will be zsh."
+          - "VSCode and vim will be available system-wide."
+          - "Run 'sudo systemctl reboot' to restart the system."
+      when: rpm_ostree_result is defined and rpm_ostree_result.changed
+
+    - name: Check current status
+      debug:
+        msg:
+          - "Packages are already available on the host system."
+          - "Default shell should be set to zsh."
+          - "VSCode and vim should be available."
+      when: packages_check.stdout_lines | length >= 3
+
+    - name: Ensure Flathub remote is present
+      shell: |
+        flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
+      become: true
+      changed_when: false
+
+    - name: Install Chromium (Flatpak) system-wide
+      shell: |
+        flatpak install -y --system flathub org.chromium.Chromium || true
+      become: true
+      changed_when: false
+
+    - name: Report Flatpak install status
+      debug:
+        msg:
+          - "Ensured Flathub and installed Chromium (org.chromium.Chromium) system-wide via Flatpak."
+      when: "true"
