@@ -31,6 +31,20 @@
       - skopeo
       - gh
       - vim
+      - python3
+      - python3-pip
+      - make
+      - gcc
+      - zlib-devel
+      - bzip2
+      - bzip2-devel
+      - readline-devel
+      - sqlite
+      - sqlite-devel
+      - openssl-devel
+      - tk-devel
+      - libffi-devel
+      - xz-devel
 
   tasks:
     - name: Ensure ~/.local/bin exists
@@ -45,18 +59,50 @@
         state: present
       become: true
 
+    - name: Upgrade pip in pymadix environment
+      pip:
+        name: pip>=24.2
+        state: present
+        executable: "{{ lookup('env','HOME') }}/.pyenv/versions/3.12.7/envs/pymadix/bin/pip"
+
+    - name: Install Ansible and related tools in pymadix environment
+      pip:
+        name:
+          - ansible==12.1.0
+          - ansible-core>=2.16.11
+          - ansible-compat>=25.8.2
+          - ansible-lint==25.9.2
+        state: present
+        executable: "{{ lookup('env','HOME') }}/.pyenv/versions/3.12.7/envs/pymadix/bin/pip"
+
+    - name: Install Python development packages in pymadix environment
+      pip:
+        name:
+          - black
+          - flake8
+          - pylint
+          - autopep8
+        state: present
+        executable: "{{ lookup('env','HOME') }}/.pyenv/versions/3.12.7/envs/pymadix/bin/pip"
+
     - name: Ensure dnf-plugins-core is installed
       dnf:
         name: dnf-plugins-core
         state: present
       become: true
 
-    - name: Add Microsoft VS Code repository
-      command: >
-        rpm --import https://packages.microsoft.com/keys/microsoft.asc
-      args:
-        creates: /etc/pki/rpm-gpg/microsoft.asc
+    - name: Check if Microsoft GPG key is already imported
+      shell: rpm -q gpg-pubkey --qf '%{SUMMARY}\n' | grep -i microsoft
+      register: microsoft_key_check
+      failed_when: false
+      changed_when: false
+
+    - name: Import Microsoft VS Code repository key
+      rpm_key:
+        key: https://packages.microsoft.com/keys/microsoft.asc
+        state: present
       become: true
+      when: microsoft_key_check.rc != 0
 
     - name: Add VS Code repository file
       copy:
@@ -68,6 +114,8 @@
           enabled=1
           gpgcheck=1
           gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+        mode: "0644"
+        force: false
       become: true
 
     - name: Install Visual Studio Code
@@ -76,6 +124,53 @@
         state: present
         update_cache: true
       become: true
+
+    - name: Check if Google GPG key is already imported
+      shell: rpm -q gpg-pubkey --qf '%{SUMMARY}\n' | grep -i google
+      register: google_key_check
+      failed_when: false
+      changed_when: false
+
+    - name: Import Google Chrome repository key
+      rpm_key:
+        key: https://dl.google.com/linux/linux_signing_key.pub
+        state: present
+      become: true
+      when: google_key_check.rc != 0
+
+    - name: Add Google Chrome repository file
+      copy:
+        dest: /etc/yum.repos.d/google-chrome.repo
+        content: |
+          [google-chrome]
+          name=google-chrome
+          baseurl=http://dl.google.com/linux/chrome/rpm/stable/x86_64
+          enabled=1
+          gpgcheck=1
+          gpgkey=https://dl.google.com/linux/linux_signing_key.pub
+        mode: "0644"
+        force: false
+      become: true
+
+    - name: Install Google Chrome
+      dnf:
+        name: google-chrome-stable
+        state: present
+        update_cache: true
+      become: true
+
+    - name: Add Flathub repository
+      flatpak_remote:
+        name: flathub
+        state: present
+        flatpakrepo_url: https://flathub.org/repo/flathub.flatpakrepo
+        method: user
+
+    - name: Install Slack via Flatpak
+      flatpak:
+        name: com.slack.Slack
+        state: present
+        method: user
     
     - name: Install kubectl
       shell: |
@@ -205,79 +300,19 @@
         dest: "{{ lookup('env','HOME') }}/.oh-my-zsh/custom/themes/powerlevel10k"
         depth: 1
 
-    - name: Write ~/.zshrc
+    - name: Copy ~/.zshrc from template (only if not exists)
       copy:
+        src: ".zshrc"
         dest: "{{ lookup('env','HOME') }}/.zshrc"
         mode: "0644"
-        content: |
-          export ZSH="$HOME/.oh-my-zsh"
-          ZSH_THEME="powerlevel10k/powerlevel10k"
-          plugins=(git kubectl zsh-autosuggestions zsh-syntax-highlighting fzf podman)
-          source $ZSH/oh-my-zsh.sh
+        force: false
 
-          export PATH="$HOME/.local/bin:$PATH"
-
-          # Kubectl aliases and completions
-          alias k="kubectl"
-          alias kctx="kubectx"
-          alias kns="kubens"
-          alias k9="k9s"
-          alias kgp="kubectl get pods"
-          alias kgs="kubectl get svc"
-          alias kgd="kubectl get deployment"
-          alias kaf="kubectl apply -f"
-          alias kdel="kubectl delete"
-          alias klog="kubectl logs"
-          alias kexec="kubectl exec -it"
-
-          # Podman aliases
-          alias docker="podman"
-          alias pd="podman"
-          alias pdi="podman images"
-          alias pds="podman ps"
-          alias pdsa="podman ps -a"
-          alias pdb="podman build"
-          alias pdr="podman run"
-          alias pde="podman exec"
-
-          # Git aliases
-          alias gs="git status"
-          alias ga="git add"
-          alias gc="git commit"
-          alias gp="git push"
-          alias gl="git pull"
-          alias gco="git checkout"
-          alias gb="git branch"
-          alias gd="git diff"
-          alias glog="git log --oneline --graph"
-
-          # FZF configuration
-          if command -v fzf >/dev/null 2>&1; then
-            [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-          fi
-
-          export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
-          export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-          export FZF_ALT_C_COMMAND='find . -type d'
-          
-          # Powerline configuration
-          if command -v powerline-daemon >/dev/null 2>&1; then
-            powerline-daemon -q
-            POWERLINE_BASH_CONTINUATION=1
-            POWERLINE_BASH_SELECT=1
-          fi
-
-          export EDITOR=vim
-
-          # Enable kubectl completion
-          if command -v kubectl >/dev/null 2>&1; then
-            source <(kubectl completion zsh)
-          fi
-
-          # Enable podman completion
-          if command -v podman >/dev/null 2>&1; then
-            source <(podman completion zsh)
-          fi
+    - name: Copy ~/.p10k.zsh from template (only if not exists)
+      copy:
+        src: ".p10k.zsh"
+        dest: "{{ lookup('env','HOME') }}/.p10k.zsh"
+        mode: "0644"
+        force: false
 
     - name: Add zsh auto-start comment to .bashrc
       lineinfile:
@@ -298,3 +333,5 @@
           - "✓ Configured zsh with Oh-My-Zsh and Powerlevel10k"
           - "✓ All tools ready: kubectl, k9s, stern, aws, jira, yq, sops"
           - "✓ Container tools: podman, buildah, skopeo"
+          - "✓ Desktop applications: VS Code, Chrome, Slack"
+          - "NOTE: Run pyenv-setup.yml to install Python environment"
