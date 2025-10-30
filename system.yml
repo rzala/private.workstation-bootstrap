@@ -101,7 +101,7 @@
         tmpdir=$(mktemp -d)
         curl -fsSL -o $tmpdir/awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
         unzip -q $tmpdir/awscliv2.zip -d $tmpdir
-        sudo $tmpdir/aws/install --bin-dir {{ bin_dir }} --install-dir $HOME/.local/aws-cli --update
+        $tmpdir/aws/install --bin-dir {{ bin_dir }} --install-dir $HOME/.local/aws-cli --update
         rm -rf $tmpdir
       args:
         creates: "{{ bin_dir }}/aws"
