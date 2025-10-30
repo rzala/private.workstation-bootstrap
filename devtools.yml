@@ -29,6 +29,8 @@
       - podman
       - buildah
       - skopeo
+      - gh
+      - vim
 
   tasks:
     - name: Ensure ~/.local/bin exists
@@ -43,6 +45,38 @@
         state: present
       become: true
 
+    - name: Ensure dnf-plugins-core is installed
+      dnf:
+        name: dnf-plugins-core
+        state: present
+      become: true
+
+    - name: Add Microsoft VS Code repository
+      command: >
+        rpm --import https://packages.microsoft.com/keys/microsoft.asc
+      args:
+        creates: /etc/pki/rpm-gpg/microsoft.asc
+      become: true
+
+    - name: Add VS Code repository file
+      copy:
+        dest: /etc/yum.repos.d/vscode.repo
+        content: |
+          [code]
+          name=Visual Studio Code
+          baseurl=https://packages.microsoft.com/yumrepos/vscode
+          enabled=1
+          gpgcheck=1
+          gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+      become: true
+
+    - name: Install Visual Studio Code
+      dnf:
+        name: code
+        state: present
+        update_cache: true
+      become: true
+    
     - name: Install kubectl
       shell: |
         set -e
