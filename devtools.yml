@@ -14,66 +14,13 @@
     sops_version: "v3.9.0"
 
     bin_dir: "{{ lookup('env','HOME') }}/.local/bin"
-
-    base_packages:
-      - git
-      - fzf
-      - curl
-      - unzip
-      - tar
-      - jq
-      - ripgrep
-      - procps-ng
-      - powerline
-      - powerline-fonts
-      - podman
-      - buildah
-      - skopeo
-      - gh
-      - vim
-      - python3
-      - python3-pip
-      - make
-      - gcc
-      - zlib-devel
-      - bzip2
-      - bzip2-devel
-      - readline-devel
-      - sqlite
-      - sqlite-devel
-      - openssl-devel
-      - tk-devel
-      - libffi-devel
-      - xz-devel
-
+    
   tasks:
     - name: Ensure ~/.local/bin exists
       file:
         path: "{{ bin_dir }}"
         state: directory
         mode: "0755"
-
-    - name: Install base development packages via DNF
-      dnf:
-        name: "{{ base_packages }}"
-        state: present
-      become: true
-
-    - name: Upgrade pip in pymadix environment
-      pip:
-        name: pip>=24.2
-        state: present
-        executable: "{{ lookup('env','HOME') }}/.pyenv/versions/3.12.7/envs/pymadix/bin/pip"
-
-    - name: Install Ansible and related tools in pymadix environment
-      pip:
-        name:
-          - ansible==12.1.0
-          - ansible-core>=2.16.11
-          - ansible-compat>=25.8.2
-          - ansible-lint==25.9.2
-        state: present
-        executable: "{{ lookup('env','HOME') }}/.pyenv/versions/3.12.7/envs/pymadix/bin/pip"
 
     - name: Install Python development packages in pymadix environment
       pip:
@@ -159,6 +106,49 @@
         update_cache: true
       become: true
 
+    - name: Check if Tailscale GPG key is already imported
+      shell: rpm -q gpg-pubkey --qf '%{SUMMARY}\n' | grep -i tailscale
+      register: tailscale_key_check
+      failed_when: false
+      changed_when: false
+
+    - name: Import Tailscale repository key
+      rpm_key:
+        key: https://pkgs.tailscale.com/stable/fedora/repo.gpg
+        state: present
+      become: true
+      when: tailscale_key_check.rc != 0
+
+    - name: Add Tailscale repository file
+      copy:
+        dest: /etc/yum.repos.d/tailscale.repo
+        content: |
+          [tailscale-stable]
+          name=Tailscale stable
+          baseurl=https://pkgs.tailscale.com/stable/fedora/$basearch
+          enabled=1
+          type=rpm
+          repo_gpgcheck=1
+          gpgcheck=0
+          gpgkey=https://pkgs.tailscale.com/stable/fedora/repo.gpg
+        mode: "0644"
+        force: false
+      become: true
+
+    - name: Install Tailscale
+      dnf:
+        name: tailscale
+        state: present
+        update_cache: true
+      become: true
+
+    - name: Enable and start Tailscale service
+      systemd:
+        name: tailscaled
+        enabled: true
+        state: started
+      become: true
+
     - name: Add Flathub repository
       flatpak_remote:
         name: flathub
@@ -227,7 +217,7 @@
         tmpdir=$(mktemp -d)
         curl -fsSL -o $tmpdir/awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
         unzip -q $tmpdir/awscliv2.zip -d $tmpdir
-        sudo $tmpdir/aws/install --bin-dir {{ bin_dir }} --install-dir $HOME/.local/aws-cli --update
+        $tmpdir/aws/install --bin-dir {{ bin_dir }} --install-dir $HOME/.local/aws-cli --update
         rm -rf $tmpdir
       args:
         creates: "{{ bin_dir }}/aws"
@@ -305,26 +295,32 @@
         src: ".zshrc"
         dest: "{{ lookup('env','HOME') }}/.zshrc"
         mode: "0644"
-        force: false
+        force: |
+          {{ create_zshrc | default(false) }}"
+      tags: zsh-setup
 
     - name: Copy ~/.p10k.zsh from template (only if not exists)
       copy:
         src: ".p10k.zsh"
         dest: "{{ lookup('env','HOME') }}/.p10k.zsh"
         mode: "0644"
-        force: false
+        force: |
+          {{ create_zshrc | default(false) }}"
+      tags: zsh-setup
 
     - name: Add zsh auto-start comment to .bashrc
       lineinfile:
         path: "{{ lookup('env','HOME') }}/.bashrc"
         line: "# Auto-start zsh if available and interactive"
         create: yes
+      tags: zsh-setup
 
     - name: Add zsh exec to .bashrc
       lineinfile:
         path: "{{ lookup('env','HOME') }}/.bashrc"
         line: '[[ $- == *i* ]] && command -v zsh >/dev/null 2>&1 && [[ "$SHELL" != *"zsh"* ]] && exec zsh'
         create: yes
+      tags: zsh-setup
 
     - name: Summary
       debug:
@@ -334,4 +330,6 @@
           - "✓ All tools ready: kubectl, k9s, stern, aws, jira, yq, sops"
           - "✓ Container tools: podman, buildah, skopeo"
           - "✓ Desktop applications: VS Code, Chrome, Slack"
+          - "✓ Network: Tailscale client installed and service enabled"
+          - "NOTE: Run 'sudo tailscale up' to connect to your tailnet"
           - "NOTE: Run pyenv-setup.yml to install Python environment"

@@ -77,8 +77,9 @@ fi
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-if command -v pyenv 1>/dev/null 2>&1; then
-  if [ -z "$PYENV_VIRTUAL_ENV" ] || [ "$PYENV_VIRTUAL_ENV" != "$HOME/.pyenv/versions/3.12.7/envs/pymadix" ]; then
-    pyenv activate pymadix 2>/dev/null || true
-  fi
-fi
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+
+pyenv activate pymadix 2>/dev/null || true
+
