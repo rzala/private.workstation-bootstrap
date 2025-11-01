@@ -189,6 +189,34 @@
       args:
         creates: "{{ bin_dir }}/kubens"
 
+    - name: Install Krew (kubectl plugin manager)
+      shell: |
+        set -x
+        cd "$(mktemp -d)"
+        OS="$(uname | tr '[:upper:]' '[:lower:]')"
+        ARCH="$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\(arm\)\(64\)\?.*/\1\2/' -e 's/aarch64$/arm64/')"
+        KREW="krew-${OS}_${ARCH}"
+        curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/${KREW}.tar.gz"
+        tar zxvf "${KREW}.tar.gz"
+        ./"${KREW}" install krew
+      tags: krew
+
+    - name: Update Krew and install kubectl plugins
+      shell: |
+        export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+        kubectl krew update
+        kubectl krew install oidc-login konfig
+      args:
+        creates: "{{ lookup('env','HOME') }}/.krew/receipts/oidc-login.yaml"
+      tags: krew
+
+    - name: Create ~/.kube/configs directory for kubeconfig files
+      file:
+        path: "{{ lookup('env','HOME') }}/.kube/configs"
+        state: directory
+        mode: "0755"
+      tags: kube
+
     - name: Install k9s
       shell: |
         set -e
@@ -322,14 +350,23 @@
         create: yes
       tags: zsh-setup
 
+    - name: Add Krew to PATH in .zshrc
+      lineinfile:
+        path: "{{ lookup('env','HOME') }}/.zshrc"
+        line: 'export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"'
+        create: yes
+      tags: zsh-setup
+
     - name: Summary
       debug:
         msg:
           - "✓ Installed development tools into ~/.local/bin"
           - "✓ Configured zsh with Oh-My-Zsh and Powerlevel10k"
           - "✓ All tools ready: kubectl, k9s, stern, aws, jira, yq, sops"
+          - "✓ Kubernetes tools: kubectl, kubectx, kubens, k9s, stern, krew"
           - "✓ Container tools: podman, buildah, skopeo"
           - "✓ Desktop applications: VS Code, Chrome, Slack"
           - "✓ Network: Tailscale client installed and service enabled"
           - "NOTE: Run 'sudo tailscale up' to connect to your tailnet"
+          - "NOTE: Add ~/.krew/bin to your PATH for krew plugins"
           - "NOTE: Run pyenv-setup.yml to install Python environment"
