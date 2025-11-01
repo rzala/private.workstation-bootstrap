@@ -105,8 +105,9 @@
         pyenv deactivate 2>/dev/null || true
       args:
         executable: /bin/bash
-      ignore_errors: yes
+      #ignore_errors: yes
       changed_when: false
+      tags: pyenv
 
     - name: Upgrade pip in pymadix environment
       pip:
