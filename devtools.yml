@@ -72,6 +72,18 @@
         update_cache: true
       become: true
 
+    - name: Install Fira Code font
+      dnf:
+        name: fira-code-fonts
+        state: present
+      become: true
+
+    - name: Ensure VS Code user configuration directory exists
+      file:
+        path: "{{ lookup('env','HOME') }}/.config/Code/User"
+        state: directory
+        mode: "0755"
+
     - name: Check if Google GPG key is already imported
       shell: rpm -q gpg-pubkey --qf '%{SUMMARY}\n' | grep -i google
       register: google_key_check

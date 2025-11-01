@@ -1,0 +1,25 @@
+---
+- name: Personal configuration setup
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Set global git user email
+      git_config:
+        name: user.email
+        value: "robert.z@dedico.ai"
+        scope: global
+
+    - name: Set global git user name
+      git_config:
+        name: user.name
+        value: "Robert Zalavary"
+        scope: global
+
+    - name: Summary
+      debug:
+        msg:
+          - "✓ Configured git global user settings"
+          - "  - Email: robert.z@dedico.ai"
+          - "  - Name: Robert Zalavary"
