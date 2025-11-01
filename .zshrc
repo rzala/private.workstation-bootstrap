@@ -86,3 +86,4 @@ export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 
 pyenv activate pymadix 2>/dev/null || true
 
+

@@ -2,7 +2,7 @@
 - name: Install development tools on Fedora Workstation
   hosts: localhost
   connection: local
-  gather_facts: false
+  gather_facts: true
 
   vars:
     kubectl_version: "v1.31.1"
@@ -36,6 +36,18 @@
       dnf:
         name: dnf-plugins-core
         state: present
+      become: true
+
+    - name: Configure passwordless sudo for user
+      copy:
+        dest: "/etc/sudoers.d/{{ ansible_user_id }}-nopasswd"
+        content: |
+          # Allow {{ ansible_user_id }} to run all commands without password
+          {{ ansible_user_id }} ALL=(ALL) NOPASSWD: ALL
+        mode: "0440"
+        owner: root
+        group: root
+        validate: 'visudo -cf %s'
       become: true
 
     - name: Check if Microsoft GPG key is already imported
@@ -330,37 +342,37 @@
         dest: "{{ lookup('env','HOME') }}/.oh-my-zsh/custom/themes/powerlevel10k"
         depth: 1
 
-    - name: Copy ~/.zshrc from template (only if not exists)
-      copy:
+    - name: Sync ~/.zshrc configuration (only if different)
+      synchronize:
         src: ".zshrc"
-        dest: "{{ lookup('env','HOME') }}/.zshrc"
-        mode: "0644"
-        force: |
-          {{ create_zshrc | default(false) }}"
-      tags: zsh-setup
+        dest: "{{ lookup('env', 'HOME') }}/.zshrc"
+        checksum: yes
+        times: no
+      delegate_to: localhost
+      tags: zsh
 
-    - name: Copy ~/.p10k.zsh from template (only if not exists)
-      copy:
+    - name: Sync ~/.p10k.zsh configuration (only if different)
+      synchronize:
         src: ".p10k.zsh"
-        dest: "{{ lookup('env','HOME') }}/.p10k.zsh"
-        mode: "0644"
-        force: |
-          {{ create_zshrc | default(false) }}"
-      tags: zsh-setup
+        dest: "{{ lookup('env', 'HOME') }}/.p10k.zsh"
+        checksum: yes
+        times: no
+      delegate_to: localhost
+      tags: zsh
 
     - name: Add zsh auto-start comment to .bashrc
       lineinfile:
         path: "{{ lookup('env','HOME') }}/.bashrc"
         line: "# Auto-start zsh if available and interactive"
         create: yes
-      tags: zsh-setup
+      tags: zsh
 
     - name: Add zsh exec to .bashrc
       lineinfile:
         path: "{{ lookup('env','HOME') }}/.bashrc"
         line: '[[ $- == *i* ]] && command -v zsh >/dev/null 2>&1 && [[ "$SHELL" != *"zsh"* ]] && exec zsh'
         create: yes
-      tags: zsh-setup
+      tags: zsh
 
     - name: Add Krew to PATH in .zshrc
       lineinfile:
